@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Dangbei Projector",
-        "description": "Connect Home Assistant directly to a Dangbei projector via its WebSocket control endpoint.",
+        "description": "Connect Home Assistant directly to a Dangbei projector via its WebSocket control endpoint. Optionally also configure a companion ESP32 wake-up device (esp32-dangbei-wol) to support remote power-on.",
         "data": {
           "host": "Host / IP address",
           "port": "WebSocket port",
@@ -12,12 +12,30 @@
           "from_id": "fromId",
           "msg_type": "Message type",
           "power_off_confirm": "Auto-confirm power-off dialog",
-          "power_off_confirm_delay": "Power-off confirm delay (seconds)"
+          "power_off_confirm_delay": "Power-off confirm delay (seconds)",
+          "wol_host": "ESP32 WOL device host / IP (optional)",
+          "wol_port": "ESP32 WOL device port",
+          "wol_token": "ESP32 WOL auth token (optional)",
+          "wol_wake_profile": "ESP32 wake profile",
+          "wol_wake_custom_format": "Custom wake format",
+          "wol_wake_custom_hex": "Custom wake hex"
         }
+      },
+      "zeroconf_confirm": {
+        "title": "ESP32 wake-up device found",
+        "description": "Discovered an ESP32 Dangbei wake-up device at {host} (id: {id}). Continue to configure the projector connection details.",
+        "data": {}
       }
     },
     "error": {
-      "cannot_connect": "Cannot reach projector WebSocket. Check host/port and that the projector is powered on."
+      "cannot_connect": "Cannot reach projector WebSocket. Check host/port and that the projector is powered on.",
+      "wol_cannot_connect": "Cannot reach the ESP32 wake-up device. Check its IP / port / token.",
+      "wol_firmware_too_old": "The ESP32 firmware is too old for wake-profile settings. Upgrade esp32-dangbei-wol first.",
+      "wol_sync_failed": "The ESP32 wake-up device rejected or failed to save the wake-profile settings.",
+      "invalid_wake_profile": "Choose a valid wake profile.",
+      "invalid_wake_custom_format": "Choose a valid custom wake format.",
+      "missing_wake_custom_hex": "Enter a custom wake packet in hexadecimal form.",
+      "invalid_wake_custom_hex": "The custom wake hex is invalid or exceeds the allowed size."
     },
     "abort": {
       "already_configured": "This projector is already configured."
@@ -29,7 +47,11 @@
         "title": "Dangbei Projector options",
         "data": {
           "power_off_confirm": "Auto-confirm power-off dialog",
-          "power_off_confirm_delay": "Power-off confirm delay (seconds)"
+          "power_off_confirm_delay": "Power-off confirm delay (seconds)",
+          "status_poll_interval": "Online status poll interval (seconds)",
+          "wol_wake_profile": "ESP32 wake profile",
+          "wol_wake_custom_format": "Custom wake format",
+          "wol_wake_custom_hex": "Custom wake hex"
         }
       }
     }
@@ -45,11 +67,14 @@
       "home": { "name": "Home" },
       "menu": { "name": "Menu" },
       "volume_up": { "name": "Volume Up" },
-      "volume_down": { "name": "Volume Down" },
-      "power_off": { "name": "Power Off" }
+      "volume_down": { "name": "Volume Down" }
     },
     "remote": {
-      "remote": { "name": "Remote" }
+      "remote": { "name": "Power" }
+    },
+    "binary_sensor": {
+      "online": { "name": "Online" },
+      "esp32_online": { "name": "ESP32 Online" }
     }
   }
 }

@@ -1,22 +1,14 @@
-"""Button entities for each Dangbei remote key."""
+"""Button entities for Dangbei remote keys."""
 from __future__ import annotations
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .client import DangbeiClient
-from .const import (
-    COMMAND_ICONS,
-    COMMAND_LABELS,
-    COMMAND_VALUE_MAP,
-    DEVICE_MANUFACTURER,
-    DEVICE_MODEL,
-    DOMAIN,
-)
+from . import DangbeiRuntimeData
+from .const import BUTTON_COMMANDS, COMMAND_ICONS, DOMAIN
+from .device_info import projector_device_info
 
 
 async def async_setup_entry(
@@ -24,9 +16,10 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    client: DangbeiClient = hass.data[DOMAIN][entry.entry_id]
+    """Set up non-power remote buttons for a Dangbei projector."""
+    runtime: DangbeiRuntimeData = hass.data[DOMAIN][entry.entry_id]
     async_add_entities(
-        DangbeiButton(entry, client, cmd) for cmd in COMMAND_VALUE_MAP
+        [DangbeiButton(entry, runtime.client, command) for command in BUTTON_COMMANDS]
     )
 
 
@@ -36,22 +29,15 @@ class DangbeiButton(ButtonEntity):
     _attr_has_entity_name = True
     _attr_should_poll = False
 
-    def __init__(
-        self, entry: ConfigEntry, client: DangbeiClient, command: str
-    ) -> None:
-        self._entry = entry
+    def __init__(self, entry: ConfigEntry, client, command: str) -> None:
         self._client = client
         self._command = command
         self._attr_unique_id = f"{entry.entry_id}_{command}"
         self._attr_translation_key = command
-        self._attr_name = COMMAND_LABELS[command]
+        self._attr_name = None
         self._attr_icon = COMMAND_ICONS.get(command)
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name=entry.title or f"Dangbei ({entry.data[CONF_HOST]})",
-            manufacturer=DEVICE_MANUFACTURER,
-            model=DEVICE_MODEL,
-        )
+        self._attr_device_info = projector_device_info(entry)
 
     async def async_press(self) -> None:
+        """Send the mapped projector command."""
         await self._client.async_send_command(self._command)

@@ -22,6 +22,18 @@ CONNECT_TIMEOUT = 5.0
 SEND_TIMEOUT = 5.0
 
 
+class DangbeiWolClientError(Exception):
+    """Raised when the ESP32 wake-up device cannot satisfy a request."""
+
+
+class DangbeiWolUnsupportedError(DangbeiWolClientError):
+    """Raised when the ESP32 firmware lacks a required endpoint."""
+
+
+class DangbeiWolValidationError(DangbeiWolClientError):
+    """Raised when the ESP32 rejects a wake-profile payload."""
+
+
 class DangbeiClient:
     """Maintain a WebSocket connection to the projector and send remote commands."""
 
@@ -164,3 +176,123 @@ class DangbeiClient:
             timeout=CONNECT_TIMEOUT,
         )
         await ws.close()
+
+    async def async_probe_alive(self, timeout: float = 2.0) -> bool:
+        """Return True if the projector's WebSocket port accepts connections.
+
+        The projector only listens on port 6689 when powered on, so a successful
+        handshake is treated as "projector is on".
+        """
+        try:
+            ws = await asyncio.wait_for(
+                self._session.ws_connect(self.url, heartbeat=None),
+                timeout=timeout,
+            )
+        except (aiohttp.ClientError, asyncio.TimeoutError, OSError):
+            return False
+        try:
+            await ws.close()
+        except Exception:  # noqa: BLE001
+            pass
+        return True
+
+
+class DangbeiWolClient:
+    """HTTP client for the companion esp32-dangbei-wol firmware."""
+
+    def __init__(
+        self,
+        session: aiohttp.ClientSession,
+        host: str,
+        port: int = 80,
+        token: str | None = None,
+    ) -> None:
+        self._session = session
+        self._host = host
+        self._port = port
+        self._token = token.strip() if token else ""
+
+    @property
+    def base_url(self) -> str:
+        return f"http://{self._host}:{self._port}"
+
+    def _headers(self) -> dict[str, str]:
+        if self._token:
+            return {"Authorization": f"Bearer {self._token}"}
+        return {}
+
+    async def _async_request(
+        self,
+        method: str,
+        path: str,
+        *,
+        expect_json: bool,
+        json_body: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        try:
+            async with self._session.request(
+                method,
+                f"{self.base_url}{path}",
+                headers=self._headers(),
+                json=json_body,
+                timeout=aiohttp.ClientTimeout(total=5),
+            ) as resp:
+                body = await resp.text()
+        except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as err:
+            raise DangbeiWolClientError(str(err)) from err
+
+        if resp.status in (404, 501):
+            detail = body.strip() or "Unsupported by current ESP32 firmware"
+            raise DangbeiWolUnsupportedError(detail)
+        if resp.status == 400:
+            detail = body.strip() or "Invalid wake-up configuration"
+            raise DangbeiWolValidationError(detail)
+        if resp.status not in (200, 202):
+            detail = body.strip() or f"HTTP {resp.status}"
+            raise DangbeiWolClientError(detail)
+
+        if not expect_json:
+            return None
+
+        try:
+            data = json.loads(body) if body else {}
+        except json.JSONDecodeError as err:
+            raise DangbeiWolClientError("Invalid JSON response from ESP32") from err
+
+        if not isinstance(data, dict):
+            raise DangbeiWolClientError("Unexpected response from ESP32")
+        return data
+
+    async def async_wakeup(self) -> None:
+        """Trigger a BLE wake-up broadcast on the ESP32."""
+        await self._async_request("POST", "/api/wakeup", expect_json=False)
+
+    async def async_get_info(self) -> dict[str, Any]:
+        response = await self._async_request("GET", "/api/info", expect_json=True)
+        assert response is not None
+        return response
+
+    async def async_set_wakeup_config(
+        self,
+        *,
+        profile: str,
+        custom_format: str,
+        custom_hex: str,
+    ) -> dict[str, Any]:
+        """Persist the active wake-profile configuration on the ESP32."""
+        response = await self._async_request(
+            "POST",
+            "/api/wakeup_config",
+            expect_json=True,
+            json_body={
+                "profile": profile,
+                "custom_format": custom_format,
+                "custom_hex": custom_hex,
+            },
+        )
+        assert response is not None
+        return response
+
+    async def async_test(self) -> dict[str, Any]:
+        """Used by the config flow to verify the ESP32 is reachable."""
+        return await self.async_get_info()

@@ -9,5 +9,8 @@
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/jianglizi/ha-dangbei/issues",
   "requirements": [],
-  "version": "0.1.0"
+  "version": "0.3.0",
+  "zeroconf": [
+    { "type": "_dangbei-wol._tcp.local." }
+  ]
 }

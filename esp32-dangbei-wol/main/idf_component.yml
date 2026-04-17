@@ -1,0 +1,6 @@
+## ESP-IDF managed components for dangbei_wol
+## Reference: https://docs.espressif.com/projects/esp-idf/en/v5.5/esp32c3/api-guides/tools/idf-component-manager.html
+dependencies:
+  idf:
+    version: ">=5.5.0"
+  espressif/mdns: "^1.4.0"

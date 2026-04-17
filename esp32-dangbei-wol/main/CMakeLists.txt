@@ -1,0 +1,24 @@
+idf_component_register(
+    SRCS
+        "main.c"
+        "app_wifi.c"
+        "app_provision.c"
+        "app_http.c"
+        "app_ble_wakeup.c"
+        "app_wake_profile.c"
+        "app_mdns.c"
+        "app_status.c"
+        "app_captive_dns.c"
+    INCLUDE_DIRS
+        "."
+    REQUIRES
+        nvs_flash
+        esp_wifi
+        esp_netif
+        esp_event
+        esp_http_server
+        mdns
+        bt
+        json
+        esp_timer
+)
