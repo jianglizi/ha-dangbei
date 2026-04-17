@@ -1,0 +1,55 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "当贝投影仪",
+        "description": "通过 WebSocket 直接连接当贝投影仪",
+        "data": {
+          "host": "主机 / IP 地址",
+          "port": "WebSocket 端口",
+          "device_id": "设备 ID（toDeviceId）",
+          "to_id": "toId",
+          "from_id": "fromId",
+          "msg_type": "消息类型",
+          "power_off_confirm": "关机时自动确认弹窗",
+          "power_off_confirm_delay": "关机确认延迟（秒）"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "无法连接投影仪 WebSocket，请检查 IP/端口，并确认投影仪已开机。"
+    },
+    "abort": {
+      "already_configured": "该投影仪已添加。"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "当贝投影仪选项",
+        "data": {
+          "power_off_confirm": "关机时自动确认弹窗",
+          "power_off_confirm_delay": "关机确认延迟（秒）"
+        }
+      }
+    }
+  },
+  "entity": {
+    "button": {
+      "up": { "name": "上" },
+      "down": { "name": "下" },
+      "left": { "name": "左" },
+      "right": { "name": "右" },
+      "ok": { "name": "确定" },
+      "back": { "name": "返回" },
+      "home": { "name": "主页" },
+      "menu": { "name": "菜单" },
+      "volume_up": { "name": "音量+" },
+      "volume_down": { "name": "音量-" },
+      "power_off": { "name": "关机" }
+    },
+    "remote": {
+      "remote": { "name": "遥控器" }
+    }
+  }
+}

@@ -1,0 +1,67 @@
+name: Bug report
+description: 报告集成问题或兼容性故障
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提交前请先确认：
+        - 已阅读 README
+        - 已升级到最新代码
+        - 已附带必要日志和复现步骤
+  - type: input
+    id: ha_version
+    attributes:
+      label: Home Assistant 版本
+      placeholder: "例如 2026.4.2"
+    validations:
+      required: true
+  - type: input
+    id: integration_version
+    attributes:
+      label: 集成版本
+      placeholder: "例如 0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: projector_model
+    attributes:
+      label: 投影仪型号
+      placeholder: "例如 D5X Pro"
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 简要说明实际现象和预期行为
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      description: 请按顺序列出复现步骤
+      placeholder: |
+        1. 添加集成
+        2. 点击某个按键
+        3. 观察到 ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 相关日志
+      description: 请粘贴与 `custom_components.dangbei` 相关的日志
+      render: shell
+    validations:
+      required: false
+  - type: textarea
+    id: additional
+    attributes:
+      label: 补充信息
+      description: 任何你认为有助于定位问题的补充内容
+    validations:
+      required: false

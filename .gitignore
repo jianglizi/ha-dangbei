@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*.pyo
+*.swp
+.DS_Store
+.idea/
+.vscode/
+.claude/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+build/
+dist/

@@ -1,0 +1,55 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Dangbei Projector",
+        "description": "Connect Home Assistant directly to a Dangbei projector via its WebSocket control endpoint.",
+        "data": {
+          "host": "Host / IP address",
+          "port": "WebSocket port",
+          "device_id": "Device ID (toDeviceId)",
+          "to_id": "toId",
+          "from_id": "fromId",
+          "msg_type": "Message type",
+          "power_off_confirm": "Auto-confirm power-off dialog",
+          "power_off_confirm_delay": "Power-off confirm delay (seconds)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot reach projector WebSocket. Check host/port and that the projector is powered on."
+    },
+    "abort": {
+      "already_configured": "This projector is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Dangbei Projector options",
+        "data": {
+          "power_off_confirm": "Auto-confirm power-off dialog",
+          "power_off_confirm_delay": "Power-off confirm delay (seconds)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "button": {
+      "up": { "name": "Up" },
+      "down": { "name": "Down" },
+      "left": { "name": "Left" },
+      "right": { "name": "Right" },
+      "ok": { "name": "OK" },
+      "back": { "name": "Back" },
+      "home": { "name": "Home" },
+      "menu": { "name": "Menu" },
+      "volume_up": { "name": "Volume Up" },
+      "volume_down": { "name": "Volume Down" },
+      "power_off": { "name": "Power Off" }
+    },
+    "remote": {
+      "remote": { "name": "Remote" }
+    }
+  }
+}
