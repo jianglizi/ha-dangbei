@@ -13,6 +13,14 @@ Home Assistant 自定义集成，通过局域网 WebSocket 直连当贝投影仪
 
 发送 `power_off` 后，集成会按默认 2 秒延迟自动补发一次 `ok`，用于关闭关机确认弹窗。这个行为可在选项中关闭或调整延迟。
 
+## 示例
+
+<p align="center">
+  <img src="./doc/image/image.png" alt="Dangbei Projector 集成示例" width="900" />
+</p>
+
+<p align="center"><em>Home Assistant 中的 Dangbei Projector 实体示例</em></p>
+
 ## 安装
 
 ### HACS
