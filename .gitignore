@@ -11,6 +11,7 @@ __pycache__/
 .mypy_cache/
 build/
 dist/
+dangbeijia/
 
 sdkconfig
 sdkconfig.old

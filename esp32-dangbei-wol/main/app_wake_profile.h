@@ -9,14 +9,14 @@
 extern "C" {
 #endif
 
-#define APP_WAKE_PROFILE_API_VERSION 2
+#define APP_WAKE_PROFILE_API_VERSION 3
 #define APP_WAKE_PROFILE_MAX_ADV_BYTES 31
 #define APP_WAKE_PROFILE_MAX_CUSTOM_HEX_LEN (APP_WAKE_PROFILE_MAX_ADV_BYTES * 2)
 #define APP_WAKE_PROFILE_MAX_MANUFACTURER_DATA_BYTES 16
+#define APP_WAKE_MAC_LEN 6
 
 typedef enum {
-    APP_WAKE_PROFILE_D5X_PRO = 0,
-    APP_WAKE_PROFILE_F3_AIR,
+    APP_WAKE_PROFILE_MAC_BASED = 0,
     APP_WAKE_PROFILE_CUSTOM,
 } app_wake_profile_kind_t;
 
@@ -28,6 +28,7 @@ typedef enum {
 typedef struct {
     app_wake_profile_kind_t profile;
     app_wake_custom_format_t custom_format;
+    uint8_t bluetooth_mac[APP_WAKE_MAC_LEN];
     char custom_hex[APP_WAKE_PROFILE_MAX_CUSTOM_HEX_LEN + 1];
 } app_wake_profile_config_t;
 
@@ -46,7 +47,9 @@ void app_wake_profile_get_config(app_wake_profile_config_t *out);
 
 esp_err_t app_wake_profile_set_config(const app_wake_profile_config_t *config);
 
-esp_err_t app_wake_profile_build_adv_config(app_wake_adv_config_t *out);
+esp_err_t app_wake_profile_build_phase1_config(app_wake_adv_config_t *out);
+
+esp_err_t app_wake_profile_build_phase2_config(app_wake_adv_config_t *out);
 
 const char *app_wake_profile_profile_name(app_wake_profile_kind_t profile);
 
@@ -60,6 +63,18 @@ esp_err_t app_wake_profile_parse_profile(
 esp_err_t app_wake_profile_parse_custom_format(
     const char *value,
     app_wake_custom_format_t *out
+);
+
+void app_wake_profile_compute_phase1(
+    const uint8_t *mac,
+    uint8_t *out,
+    size_t out_len
+);
+
+void app_wake_profile_compute_phase2(
+    const uint8_t *mac,
+    uint8_t *out,
+    size_t out_len
 );
 
 #ifdef __cplusplus

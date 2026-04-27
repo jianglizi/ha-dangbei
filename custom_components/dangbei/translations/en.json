@@ -3,55 +3,64 @@
     "step": {
       "user": {
         "title": "Dangbei Projector",
-        "description": "Connect Home Assistant directly to a Dangbei projector via its WebSocket control endpoint. Optionally also configure a companion ESP32 wake-up device (esp32-dangbei-wol) to support remote power-on.",
+        "description": "Select a discovered projector from the list, or choose 'Manual input' and enter the IP address below.",
         "data": {
+          "projector_select": "Discovered projector",
           "host": "Host / IP address",
-          "port": "WebSocket port",
-          "device_id": "Device ID (toDeviceId)",
-          "to_id": "toId",
-          "from_id": "fromId",
-          "msg_type": "Message type",
-          "power_off_confirm": "Auto-confirm power-off dialog",
-          "power_off_confirm_delay": "Power-off confirm delay (seconds)",
+          "port": "WebSocket port"
+        }
+      },
+      "confirm": {
+        "title": "Device Discovered",
+        "description": "Found projector:\n\n{info}\n\nContinue to finish setup."
+      },
+      "projector_confirm": {
+        "title": "Projector Found",
+        "description": "Discovered a Dangbei projector via mDNS:\n\n{info}\n\nContinue to run handshake and finish setup."
+      },
+      "setup": {
+        "title": "Optional Settings",
+        "description": "Optionally configure a companion ESP32 wake-up device (esp32-dangbei-wol) to support remote power-on.",
+        "data": {
           "wol_host": "ESP32 WOL device host / IP (optional)",
           "wol_port": "ESP32 WOL device port",
           "wol_token": "ESP32 WOL auth token (optional)",
-          "wol_wake_profile": "ESP32 wake profile",
-          "wol_wake_custom_format": "Custom wake format",
-          "wol_wake_custom_hex": "Custom wake hex"
+          "power_off_confirm": "Auto-confirm power-off dialog",
+          "power_off_confirm_delay": "Power-off confirm delay (seconds)"
         }
       },
       "zeroconf_confirm": {
         "title": "ESP32 wake-up device found",
-        "description": "Discovered an ESP32 Dangbei wake-up device at {host} (id: {id}). Continue to configure the projector connection details.",
+        "description": "Discovered an ESP32 Dangbei wake-up device at {host} (id: {id}). Continue to configure the projector connection.",
         "data": {}
       }
     },
     "error": {
-      "cannot_connect": "Cannot reach projector WebSocket. Check host/port and that the projector is powered on.",
-      "wol_cannot_connect": "Cannot reach the ESP32 wake-up device. Check its IP / port / token.",
-      "wol_firmware_too_old": "The ESP32 firmware is too old for wake-profile settings. Upgrade esp32-dangbei-wol first.",
-      "wol_sync_failed": "The ESP32 wake-up device rejected or failed to save the wake-profile settings.",
-      "invalid_wake_profile": "Choose a valid wake profile.",
-      "invalid_wake_custom_format": "Choose a valid custom wake format.",
-      "missing_wake_custom_hex": "Enter a custom wake packet in hexadecimal form.",
-      "invalid_wake_custom_hex": "The custom wake hex is invalid or exceeds the allowed size."
+      "cannot_connect": "Cannot reach projector WebSocket. Check the IP and that the projector is powered on.",
+      "host_required": "Please enter the projector IP address or select a discovered projector.",
+      "wol_cannot_connect": "Cannot reach the ESP32 wake-up device. Check its IP / port / token."
     },
     "abort": {
-      "already_configured": "This projector is already configured."
+      "already_configured": "This projector is already configured.",
+      "incomplete_device_info": "Discovered device is missing required information.",
+      "not_dangbei_device": "Not a Dangbei device."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Dangbei Projector options",
+        "title": "Dangbei Projector Options",
         "data": {
+          "wol_host": "ESP32 WOL device host / IP",
+          "wol_port": "ESP32 WOL device port",
+          "wol_token": "ESP32 WOL auth token",
           "power_off_confirm": "Auto-confirm power-off dialog",
           "power_off_confirm_delay": "Power-off confirm delay (seconds)",
           "status_poll_interval": "Online status poll interval (seconds)",
-          "wol_wake_profile": "ESP32 wake profile",
-          "wol_wake_custom_format": "Custom wake format",
-          "wol_wake_custom_hex": "Custom wake hex"
+          "device_id": "Device ID (advanced override)",
+          "to_id": "toId (advanced override)",
+          "from_id": "fromId (advanced override)",
+          "msg_type": "Message type (advanced override)"
         }
       }
     }
@@ -67,7 +76,10 @@
       "home": { "name": "Home" },
       "menu": { "name": "Menu" },
       "volume_up": { "name": "Volume Up" },
-      "volume_down": { "name": "Volume Down" }
+      "volume_down": { "name": "Volume Down" },
+      "side_menu": { "name": "Side Menu" },
+      "find_remote": { "name": "Find Remote" },
+      "screenshot": { "name": "Screenshot" }
     },
     "remote": {
       "remote": { "name": "Power" }

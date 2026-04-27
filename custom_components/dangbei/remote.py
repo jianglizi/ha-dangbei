@@ -13,7 +13,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import DangbeiRuntimeData
 from .client import DangbeiClient, DangbeiWolClient
-from .const import CMD_POWER_OFF, COMMAND_VALUE_MAP, DOMAIN
+from .const import CMD_POWER_OFF, COMMANDS, CONF_BLUETOOTH_MAC, DOMAIN
 from .device_info import projector_device_info
 
 
@@ -39,6 +39,9 @@ class DangbeiRemote(CoordinatorEntity[bool], RemoteEntity):
         self._client: DangbeiClient = runtime.client
         self._wol_client: DangbeiWolClient | None = runtime.wol_client
         self._power_coordinator = runtime.projector_coordinator
+        self._bluetooth_mac: str = (
+            {**entry.data, **entry.options}
+        ).get(CONF_BLUETOOTH_MAC, "")
         self._attr_unique_id = f"{entry.entry_id}_remote"
         self._attr_device_info = projector_device_info(entry)
 
@@ -58,7 +61,9 @@ class DangbeiRemote(CoordinatorEntity[bool], RemoteEntity):
                 "Power-on requires a configured ESP32 wake-up device."
             )
         try:
-            await self._wol_client.async_wakeup()
+            await self._wol_client.async_wakeup(
+                bluetooth_mac=self._bluetooth_mac or None
+            )
         except Exception as err:
             raise HomeAssistantError(
                 f"Failed to trigger wake-up on ESP32: {err}"
@@ -85,10 +90,10 @@ class DangbeiRemote(CoordinatorEntity[bool], RemoteEntity):
         for _ in range(num_repeats):
             for index, cmd in enumerate(commands):
                 cmd = cmd.strip().lower()
-                if cmd not in COMMAND_VALUE_MAP:
+                if cmd not in COMMANDS:
                     raise ValueError(
                         f"Unknown Dangbei command '{cmd}'. "
-                        f"Valid: {sorted(COMMAND_VALUE_MAP)}"
+                        f"Valid: {sorted(COMMANDS)}"
                     )
                 await self._client.async_send_command(cmd)
                 saw_power_off = saw_power_off or cmd == CMD_POWER_OFF

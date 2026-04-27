@@ -9,7 +9,7 @@
 extern "C" {
 #endif
 
-#define APP_FW_VERSION "0.3.0"
+#define APP_FW_VERSION "0.4.0"
 #define APP_CHIP_NAME  "esp32c3"
 
 void app_status_init(void);

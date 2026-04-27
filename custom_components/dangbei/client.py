@@ -11,7 +11,9 @@ import aiohttp
 from .const import (
     CMD_OK,
     CMD_POWER_OFF,
-    COMMAND_VALUE_MAP,
+    COMMAND_FROM,
+    COMMANDS,
+    CommandSpec,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -20,6 +22,16 @@ RECONNECT_BACKOFF_INITIAL = 1.0
 RECONNECT_BACKOFF_MAX = 30.0
 CONNECT_TIMEOUT = 5.0
 SEND_TIMEOUT = 5.0
+
+DISCOVER_TIMEOUT = 5.0
+
+
+class CannotConnect(Exception):
+    """Raised when the projector WebSocket is unreachable."""
+
+
+class CannotDiscover(Exception):
+    """Raised when the 112 handshake fails."""
 
 
 class DangbeiWolClientError(Exception):
@@ -32,6 +44,88 @@ class DangbeiWolUnsupportedError(DangbeiWolClientError):
 
 class DangbeiWolValidationError(DangbeiWolClientError):
     """Raised when the ESP32 rejects a wake-profile payload."""
+
+
+async def discover_device(
+    session: aiohttp.ClientSession, host: str, port: int = 6689
+) -> dict[str, Any]:
+    """Connect to the projector and discover device info via the 112 handshake.
+
+    Returns a dict with keys: device_id, bluetooth_mac, device_name,
+    device_model, host_name, mac, wifi_mac, rom_version, sn.
+    Raises CannotDiscover on failure.
+    """
+    url = f"ws://{host}:{port}"
+    try:
+        ws = await asyncio.wait_for(
+            session.ws_connect(url, heartbeat=None),
+            timeout=DISCOVER_TIMEOUT,
+        )
+    except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as err:
+        raise CannotDiscover(f"Cannot connect to {url}: {err}") from err
+
+    try:
+        # The projector requires the full wrapped envelope format
+        handshake = {
+            "sn": "",
+            "data": {
+                "command": {
+                    "value": "112",
+                    "params": "",
+                    "command": "Tool",
+                    "from": 900,
+                },
+                "toDeviceId": "",
+            },
+            "toId": "",
+            "fromId": "",
+            "type": "",
+        }
+        await asyncio.wait_for(ws.send_json(handshake), timeout=SEND_TIMEOUT)
+
+        msg = await asyncio.wait_for(ws.receive(), timeout=DISCOVER_TIMEOUT)
+        if msg.type == aiohttp.WSMsgType.TEXT:
+            data = json.loads(msg.data)
+        elif msg.type == aiohttp.WSMsgType.ERROR:
+            raise CannotDiscover(f"WebSocket error during handshake: {ws.exception()}")
+        else:
+            raise CannotDiscover(f"Unexpected message type: {msg.type}")
+    finally:
+        try:
+            await ws.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+    # Response structure: {"data": {"deviceInfo": {HardDeviceModel fields}}}
+    # or sometimes {"sn":"","data":{"deviceInfo":{...}},"type":...}
+    device_info = None
+    if isinstance(data, dict):
+        inner = data.get("data", data)
+        if isinstance(inner, dict):
+            device_info = inner.get("deviceInfo") or inner.get("device_info")
+
+    if not device_info or not isinstance(device_info, dict):
+        raise CannotDiscover(
+            f"No deviceInfo in 112 response: {json.dumps(data)[:200]}"
+        )
+
+    device_id = str(
+        device_info.get("deviceId") or device_info.get("device_id") or ""
+    ).strip()
+    if not device_id:
+        raise CannotDiscover("112 response missing deviceId")
+
+    return {
+        "device_id": device_id,
+        "bluetooth_mac": str(device_info.get("bluetoothMac") or "").strip(),
+        "device_name": str(device_info.get("deviceName") or "").strip(),
+        "device_model": str(device_info.get("deviceModel") or "").strip(),
+        "host_name": str(device_info.get("hostName") or "").strip(),
+        "mac": str(device_info.get("mac") or "").strip(),
+        "wifi_mac": str(device_info.get("wifiMac") or "").strip(),
+        "rom_version": str(device_info.get("romVersion") or "").strip(),
+        "sn": str(device_info.get("sn") or "").strip(),
+    }
 
 
 class DangbeiClient:
@@ -91,15 +185,15 @@ class DangbeiClient:
             await self._ws.close()
         self._ws = None
 
-    def _build_payload(self, value: str) -> dict[str, Any]:
+    def _build_payload(self, spec: CommandSpec) -> dict[str, Any]:
         return {
             "sn": "",
             "data": {
                 "command": {
-                    "value": value,
-                    "params": "",
-                    "command": "Operation",
-                    "from": 901,
+                    "value": spec.value,
+                    "params": spec.params,
+                    "command": spec.command_type,
+                    "from": COMMAND_FROM,
                 },
                 "toDeviceId": self._device_id,
             },
@@ -131,11 +225,11 @@ class DangbeiClient:
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, RECONNECT_BACKOFF_MAX)
 
-    async def _send_value(self, value: str) -> None:
+    async def _send_spec(self, spec: CommandSpec) -> None:
         async with self._send_lock:
             await self._ensure_connected()
             assert self._ws is not None
-            payload = self._build_payload(value)
+            payload = self._build_payload(spec)
             try:
                 await asyncio.wait_for(
                     self._ws.send_json(payload), timeout=SEND_TIMEOUT
@@ -148,7 +242,12 @@ class DangbeiClient:
                 await asyncio.wait_for(
                     self._ws.send_json(payload), timeout=SEND_TIMEOUT
                 )
-            _LOGGER.debug("Sent command value=%s payload=%s", value, json.dumps(payload))
+            _LOGGER.debug(
+                "Sent command value=%s type=%s payload=%s",
+                spec.value,
+                spec.command_type,
+                json.dumps(payload),
+            )
 
     async def _reset_connection(self) -> None:
         if self._ws is not None and not self._ws.closed:
@@ -160,14 +259,14 @@ class DangbeiClient:
 
     async def async_send_command(self, command: str) -> None:
         """Send a named command (e.g. "up", "ok", "power_off")."""
-        if command not in COMMAND_VALUE_MAP:
+        spec = COMMANDS.get(command)
+        if spec is None:
             raise ValueError(f"Unknown Dangbei command: {command}")
-        value = COMMAND_VALUE_MAP[command]
-        await self._send_value(value)
+        await self._send_spec(spec)
 
         if command == CMD_POWER_OFF and self._power_off_confirm:
             await asyncio.sleep(self._power_off_confirm_delay)
-            await self._send_value(COMMAND_VALUE_MAP[CMD_OK])
+            await self._send_spec(COMMANDS[CMD_OK])
 
     async def async_test_connection(self) -> None:
         """Used by the config flow to verify the WebSocket is reachable."""
@@ -263,31 +362,41 @@ class DangbeiWolClient:
             raise DangbeiWolClientError("Unexpected response from ESP32")
         return data
 
-    async def async_wakeup(self) -> None:
-        """Trigger a BLE wake-up broadcast on the ESP32."""
-        await self._async_request("POST", "/api/wakeup", expect_json=False)
+    async def async_wakeup(self, bluetooth_mac: str | None = None) -> None:
+        """Trigger a BLE wake-up broadcast on the ESP32.
+
+        If bluetooth_mac is provided, sends it so the ESP32 can compute
+        the mac-based advertisement data.
+        """
+        body: dict[str, Any] | None = None
+        if bluetooth_mac:
+            body = {
+                "bluetooth_mac": bluetooth_mac,
+                "wake_profile": "mac_based",
+            }
+        await self._async_request(
+            "POST", "/api/wakeup", expect_json=False, json_body=body
+        )
 
     async def async_get_info(self) -> dict[str, Any]:
         response = await self._async_request("GET", "/api/info", expect_json=True)
         assert response is not None
         return response
 
-    async def async_set_wakeup_config(
+    async def async_push_wake_config(
         self,
         *,
-        profile: str,
-        custom_format: str,
-        custom_hex: str,
+        bluetooth_mac: str,
+        profile: str = "mac_based",
     ) -> dict[str, Any]:
-        """Persist the active wake-profile configuration on the ESP32."""
+        """Push the bluetooth MAC and wake profile to the ESP32."""
         response = await self._async_request(
             "POST",
             "/api/wakeup_config",
             expect_json=True,
             json_body={
                 "profile": profile,
-                "custom_format": custom_format,
-                "custom_hex": custom_hex,
+                "bluetooth_mac": bluetooth_mac,
             },
         )
         assert response is not None

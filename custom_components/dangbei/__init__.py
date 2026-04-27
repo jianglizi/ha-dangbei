@@ -11,6 +11,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .client import DangbeiClient, DangbeiWolClient
 from .const import (
+    CONF_BLUETOOTH_MAC,
     CONF_DEVICE_ID,
     CONF_FROM_ID,
     CONF_MSG_TYPE,
@@ -21,9 +22,6 @@ from .const import (
     CONF_WOL_HOST,
     CONF_WOL_PORT,
     CONF_WOL_TOKEN,
-    CONF_WOL_WAKE_CUSTOM_FORMAT,
-    CONF_WOL_WAKE_CUSTOM_HEX,
-    CONF_WOL_WAKE_PROFILE,
     DEFAULT_FROM_ID,
     DEFAULT_MSG_TYPE,
     DEFAULT_PORT,
@@ -32,8 +30,6 @@ from .const import (
     DEFAULT_STATUS_POLL_INTERVAL,
     DEFAULT_TO_ID,
     DEFAULT_WOL_PORT,
-    DEFAULT_WOL_WAKE_CUSTOM_FORMAT,
-    DEFAULT_WOL_WAKE_PROFILE,
     DOMAIN,
     PLATFORMS,
 )
@@ -41,7 +37,7 @@ from .coordinators import Esp32OnlineCoordinator, ProjectorPowerCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-ENTRY_VERSION = 2
+ENTRY_VERSION = 3
 
 
 @dataclass
@@ -56,6 +52,15 @@ class DangbeiRuntimeData:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Dangbei Projector from a config entry."""
+    if entry.version < ENTRY_VERSION:
+        _LOGGER.warning(
+            "Dangbei config entry version %s is outdated (need %s). "
+            "Please delete and re-add the integration.",
+            entry.version,
+            ENTRY_VERSION,
+        )
+        return False
+
     data = {**entry.data, **entry.options}
     session = async_get_clientsession(hass)
 
@@ -93,6 +98,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             err,
         )
 
+    # Auto-push bluetooth MAC to ESP32 if available
+    bt_mac = data.get(CONF_BLUETOOTH_MAC, "")
+    if wol_client and bt_mac:
+        try:
+            await wol_client.async_push_wake_config(bluetooth_mac=bt_mac)
+            _LOGGER.info(
+                "Pushed bluetooth_mac=%s to ESP32 at %s", bt_mac, wol_host
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("Failed to push wake config to ESP32: %s", err)
+
     poll_interval = int(
         data.get(CONF_STATUS_POLL_INTERVAL, DEFAULT_STATUS_POLL_INTERVAL)
     )
@@ -126,20 +142,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not hass.data[DOMAIN]:
             hass.data.pop(DOMAIN)
     return unloaded
-
-
-async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Migrate old entries to include wake-profile defaults."""
-    if entry.version >= ENTRY_VERSION:
-        return True
-
-    _LOGGER.info("Migrating Dangbei config entry from version %s", entry.version)
-    data = {**entry.data}
-    data.setdefault(CONF_WOL_WAKE_PROFILE, DEFAULT_WOL_WAKE_PROFILE)
-    data.setdefault(CONF_WOL_WAKE_CUSTOM_FORMAT, DEFAULT_WOL_WAKE_CUSTOM_FORMAT)
-    data.setdefault(CONF_WOL_WAKE_CUSTOM_HEX, "")
-    hass.config_entries.async_update_entry(entry, data=data, version=ENTRY_VERSION)
-    return True
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:

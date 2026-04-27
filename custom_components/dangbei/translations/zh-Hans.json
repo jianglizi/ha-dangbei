@@ -3,42 +3,47 @@
     "step": {
       "user": {
         "title": "当贝投影仪",
-        "description": "通过 WebSocket 直接连接当贝投影仪。也可以选填配套的 ESP32 开机盒子（esp32-dangbei-wol），以支持远程开机。",
+        "description": "从下方列表选择发现的投影仪，或选择'手动输入'并填写 IP 地址。",
         "data": {
+          "projector_select": "发现的投影仪",
           "host": "主机 / IP 地址",
-          "port": "WebSocket 端口",
-          "device_id": "设备 ID（toDeviceId）",
-          "to_id": "toId",
-          "from_id": "fromId",
-          "msg_type": "消息类型",
-          "power_off_confirm": "关机时自动确认弹窗",
-          "power_off_confirm_delay": "关机确认延迟（秒）",
+          "port": "WebSocket 端口"
+        }
+      },
+      "confirm": {
+        "title": "设备已发现",
+        "description": "发现投影仪：\n\n{info}\n\n继续完成设置。"
+      },
+      "projector_confirm": {
+        "title": "发现投影仪",
+        "description": "通过 mDNS 发现当贝投影仪：\n\n{info}\n\n继续执行握手并完成设置。"
+      },
+      "setup": {
+        "title": "可选设置",
+        "description": "可选配置配套的 ESP32 开机盒子（esp32-dangbei-wol），以支持远程开机。",
+        "data": {
           "wol_host": "ESP32 开机盒子主机 / IP（可选）",
           "wol_port": "ESP32 开机盒子端口",
           "wol_token": "ESP32 开机盒子鉴权 Token（可选）",
-          "wol_wake_profile": "ESP32 开机包预设",
-          "wol_wake_custom_format": "自定义开机包格式",
-          "wol_wake_custom_hex": "自定义开机包 Hex"
+          "power_off_confirm": "关机时自动确认弹窗",
+          "power_off_confirm_delay": "关机确认延迟（秒）"
         }
       },
       "zeroconf_confirm": {
         "title": "发现 ESP32 开机盒子",
-        "description": "已发现 ESP32 当贝开机盒子：{host}（id: {id}）。继续填写投影仪连接信息。",
+        "description": "已发现 ESP32 当贝开机盒子：{host}（id: {id}）。继续配置投影仪连接。",
         "data": {}
       }
     },
     "error": {
-      "cannot_connect": "无法连接投影仪 WebSocket，请检查 IP/端口，并确认投影仪已开机。",
-      "wol_cannot_connect": "无法连接 ESP32 开机盒子，请检查 IP、端口和 Token。",
-      "wol_firmware_too_old": "ESP32 固件版本过旧，不支持开机包配置，请先升级 esp32-dangbei-wol。",
-      "wol_sync_failed": "ESP32 开机盒子保存开机包配置失败。",
-      "invalid_wake_profile": "请选择有效的开机包预设。",
-      "invalid_wake_custom_format": "请选择有效的自定义开机包格式。",
-      "missing_wake_custom_hex": "请输入自定义开机包 Hex。",
-      "invalid_wake_custom_hex": "自定义开机包 Hex 非法，或长度超出允许范围。"
+      "cannot_connect": "无法连接投影仪 WebSocket，请检查 IP 并确认投影仪已开机。",
+      "host_required": "请输入投影仪 IP 地址，或从列表中选择发现的投影仪。",
+      "wol_cannot_connect": "无法连接 ESP32 开机盒子，请检查 IP、端口和 Token。"
     },
     "abort": {
-      "already_configured": "该投影仪已添加。"
+      "already_configured": "该投影仪已添加。",
+      "incomplete_device_info": "发现的设备缺少必要信息。",
+      "not_dangbei_device": "不是当贝设备。"
     }
   },
   "options": {
@@ -46,12 +51,16 @@
       "init": {
         "title": "当贝投影仪选项",
         "data": {
+          "wol_host": "ESP32 开机盒子主机 / IP",
+          "wol_port": "ESP32 开机盒子端口",
+          "wol_token": "ESP32 开机盒子鉴权 Token",
           "power_off_confirm": "关机时自动确认弹窗",
           "power_off_confirm_delay": "关机确认延迟（秒）",
           "status_poll_interval": "在线状态轮询间隔（秒）",
-          "wol_wake_profile": "ESP32 开机包预设",
-          "wol_wake_custom_format": "自定义开机包格式",
-          "wol_wake_custom_hex": "自定义开机包 Hex"
+          "device_id": "设备 ID（高级覆盖）",
+          "to_id": "toId（高级覆盖）",
+          "from_id": "fromId（高级覆盖）",
+          "msg_type": "消息类型（高级覆盖）"
         }
       }
     }
@@ -67,7 +76,10 @@
       "home": { "name": "主页" },
       "menu": { "name": "菜单" },
       "volume_up": { "name": "音量+" },
-      "volume_down": { "name": "音量-" }
+      "volume_down": { "name": "音量-" },
+      "side_menu": { "name": "侧边栏" },
+      "find_remote": { "name": "找回遥控器" },
+      "screenshot": { "name": "截图" }
     },
     "remote": {
       "remote": { "name": "电源" }

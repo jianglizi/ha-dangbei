@@ -106,40 +106,32 @@ static esp_err_t recv_request_body(httpd_req_t *req, char *buf, size_t buf_size)
     return ESP_OK;
 }
 
-static void load_wake_config_strings(
-    char *profile,
-    size_t profile_len,
-    char *custom_format,
-    size_t custom_format_len,
-    char *custom_hex,
-    size_t custom_hex_len
-)
+static void format_mac(const uint8_t *mac, char *buf, size_t buf_len)
 {
-    app_wake_profile_config_t config;
-    app_wake_profile_get_config(&config);
-
-    snprintf(profile, profile_len, "%s",
-             app_wake_profile_profile_name(config.profile));
-    snprintf(custom_format, custom_format_len, "%s",
-             app_wake_profile_custom_format_name(config.custom_format));
-    snprintf(custom_hex, custom_hex_len, "%s", config.custom_hex);
+    snprintf(buf, buf_len, "%02x:%02x:%02x:%02x:%02x:%02x",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
-static esp_err_t send_wake_config_json(httpd_req_t *req, int status_code)
+/* Parse "AA:BB:CC:DD:EE:FF" into 6 bytes. Returns true on success. */
+static bool parse_mac_str(const char *str, uint8_t *out)
 {
-    char profile[24];
-    char custom_format[24];
-    char custom_hex[APP_WAKE_PROFILE_MAX_CUSTOM_HEX_LEN + 1];
-    load_wake_config_strings(profile, sizeof(profile),
-                             custom_format, sizeof(custom_format),
-                             custom_hex, sizeof(custom_hex));
-
-    char body[256];
-    snprintf(body, sizeof(body),
-             "{\"profile\":\"%s\",\"custom_format\":\"%s\",\"custom_hex\":\"%s\"}",
-             profile, custom_format, custom_hex);
-    return send_json(req, status_code, body);
+    if (str == NULL || out == NULL) {
+        return false;
+    }
+    unsigned int vals[6] = {0};
+    int matched = sscanf(str, "%02x:%02x:%02x:%02x:%02x:%02x",
+                         &vals[0], &vals[1], &vals[2],
+                         &vals[3], &vals[4], &vals[5]);
+    if (matched != 6) {
+        return false;
+    }
+    for (int i = 0; i < 6; i++) {
+        out[i] = (uint8_t)vals[i];
+    }
+    return true;
 }
+
+/* ── GET /api/info ───────────────────────────────────────────────── */
 
 static esp_err_t info_get_handler(httpd_req_t *req)
 {
@@ -160,29 +152,32 @@ static esp_err_t info_get_handler(httpd_req_t *req)
         snprintf(ip_str, sizeof(ip_str), IPSTR, IP2STR(&ip_info.ip));
     }
 
-    char profile[24];
-    char custom_format[24];
-    char custom_hex[APP_WAKE_PROFILE_MAX_CUSTOM_HEX_LEN + 1];
-    load_wake_config_strings(profile, sizeof(profile),
-                             custom_format, sizeof(custom_format),
-                             custom_hex, sizeof(custom_hex));
+    app_wake_profile_config_t wake_config;
+    app_wake_profile_get_config(&wake_config);
+
+    char bt_mac_str[20] = "";
+    format_mac(wake_config.bluetooth_mac, bt_mac_str, sizeof(bt_mac_str));
 
     int64_t uptime_us = esp_timer_get_time();
 
     char body[512];
     snprintf(body, sizeof(body),
              "{\"id\":\"%s\",\"fw\":\"%s\",\"api_version\":%d,"
-             "\"chip\":\"%s\",\"mac\":\"%02x:%02x:%02x:%02x:%02x:%02x\","
+             "\"chip\":\"%s\","
+             "\"mac\":\"%02x:%02x:%02x:%02x:%02x:%02x\","
              "\"ip\":\"%s\",\"uptime_s\":%" PRId64 ","
-             "\"wake_profile\":\"%s\",\"wake_custom_format\":\"%s\","
-             "\"wake_custom_hex\":\"%s\"}",
+             "\"wake_profile\":\"%s\","
+             "\"bluetooth_mac\":\"%s\"}",
              id, APP_FW_VERSION, APP_WAKE_PROFILE_API_VERSION,
              APP_CHIP_NAME,
              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
              ip_str, uptime_us / 1000000,
-             profile, custom_format, custom_hex);
+             app_wake_profile_profile_name(wake_config.profile),
+             bt_mac_str);
     return send_json(req, 200, body);
 }
+
+/* ── GET /api/status ─────────────────────────────────────────────── */
 
 static esp_err_t status_get_handler(httpd_req_t *req)
 {
@@ -205,12 +200,14 @@ static esp_err_t status_get_handler(httpd_req_t *req)
              "{\"ble_busy\":%s,\"wake_count\":%" PRIu32 ","
              "\"last_wake_s_ago\":%" PRId64 ","
              "\"rssi\":%d,\"free_heap\":%" PRIu32 "}",
-             app_status_ble_busy() ? "true" : "false",
+             app_ble_wakeup_is_busy() ? "true" : "false",
              app_status_wake_count(),
              since_s, rssi,
              (uint32_t)esp_get_free_heap_size());
     return send_json(req, 200, body);
 }
+
+/* ── POST /api/wakeup ────────────────────────────────────────────── */
 
 static esp_err_t wakeup_post_handler(httpd_req_t *req)
 {
@@ -218,7 +215,36 @@ static esp_err_t wakeup_post_handler(httpd_req_t *req)
         return ESP_OK;
     }
 
-    esp_err_t err = app_ble_wakeup_trigger(APP_BLE_WAKE_DEFAULT_DURATION_MS);
+    /* Optional body: {"bluetooth_mac":"AA:BB:CC:DD:EE:FF","wake_profile":"mac_based"} */
+    if (req->content_len > 0 && req->content_len < 512) {
+        char body[512];
+        esp_err_t err = recv_request_body(req, body, sizeof(body));
+        if (err == ESP_OK) {
+            cJSON *root = cJSON_Parse(body);
+            if (root != NULL) {
+                cJSON *mac_json = cJSON_GetObjectItemCaseSensitive(root, "bluetooth_mac");
+                cJSON *profile_json = cJSON_GetObjectItemCaseSensitive(root, "wake_profile");
+
+                if (cJSON_IsString(mac_json) && mac_json->valuestring != NULL) {
+                    uint8_t mac[6];
+                    if (parse_mac_str(mac_json->valuestring, mac)) {
+                        app_wake_profile_config_t config;
+                        app_wake_profile_get_config(&config);
+                        memcpy(config.bluetooth_mac, mac, 6);
+                        if (cJSON_IsString(profile_json) &&
+                            strcmp(profile_json->valuestring, "mac_based") == 0) {
+                            config.profile = APP_WAKE_PROFILE_MAC_BASED;
+                        }
+                        app_wake_profile_set_config(&config);
+                        ESP_LOGI(TAG, "Updated bluetooth_mac from wakeup request");
+                    }
+                }
+                cJSON_Delete(root);
+            }
+        }
+    }
+
+    esp_err_t err = app_ble_wakeup_trigger();
     if (err == ESP_ERR_INVALID_STATE) {
         return send_json(req, 409,
                          "{\"started\":false,\"reason\":\"busy\"}");
@@ -229,8 +255,10 @@ static esp_err_t wakeup_post_handler(httpd_req_t *req)
                          "{\"started\":false,\"reason\":\"internal\"}");
     }
     return send_json(req, 202,
-                     "{\"started\":true,\"duration_ms\":5000}");
+                     "{\"started\":true,\"phase1_ms\":5000}");
 }
+
+/* ── POST /api/wakeup_config ─────────────────────────────────────── */
 
 static esp_err_t wakeup_config_post_handler(httpd_req_t *req)
 {
@@ -249,36 +277,55 @@ static esp_err_t wakeup_config_post_handler(httpd_req_t *req)
         return send_json(req, 400, "{\"error\":\"invalid_json\"}");
     }
 
-    cJSON *profile = cJSON_GetObjectItemCaseSensitive(root, "profile");
-    cJSON *custom_format = cJSON_GetObjectItemCaseSensitive(root, "custom_format");
-    cJSON *custom_hex = cJSON_GetObjectItemCaseSensitive(root, "custom_hex");
-    if (!cJSON_IsString(profile) || !cJSON_IsString(custom_format) ||
-        !cJSON_IsString(custom_hex)) {
+    cJSON *profile_json = cJSON_GetObjectItemCaseSensitive(root, "profile");
+    cJSON *mac_json = cJSON_GetObjectItemCaseSensitive(root, "bluetooth_mac");
+    cJSON *custom_format_json = cJSON_GetObjectItemCaseSensitive(root, "custom_format");
+    cJSON *custom_hex_json = cJSON_GetObjectItemCaseSensitive(root, "custom_hex");
+
+    if (!cJSON_IsString(profile_json)) {
         cJSON_Delete(root);
-        return send_json(req, 400, "{\"error\":\"missing_fields\"}");
+        return send_json(req, 400, "{\"error\":\"missing_profile\"}");
     }
 
-    app_wake_profile_config_t config = {
-        .profile = APP_WAKE_PROFILE_D5X_PRO,
-        .custom_format = APP_WAKE_CUSTOM_FORMAT_MANUFACTURER_DATA,
-        .custom_hex = "",
-    };
+    app_wake_profile_config_t config;
+    app_wake_profile_get_config(&config);
 
-    err = app_wake_profile_parse_profile(profile->valuestring, &config.profile);
-    if (err == ESP_OK) {
+    err = app_wake_profile_parse_profile(profile_json->valuestring, &config.profile);
+    if (err != ESP_OK) {
+        cJSON_Delete(root);
+        return send_json(req, 400, "{\"error\":\"invalid_profile\"}");
+    }
+
+    /* Update bluetooth MAC if provided */
+    if (cJSON_IsString(mac_json) && mac_json->valuestring != NULL) {
+        uint8_t mac[6];
+        if (parse_mac_str(mac_json->valuestring, mac)) {
+            memcpy(config.bluetooth_mac, mac, 6);
+        } else {
+            cJSON_Delete(root);
+            return send_json(req, 400, "{\"error\":\"invalid_mac\"}");
+        }
+    }
+
+    /* Custom profile fields (optional, only used when profile=custom) */
+    if (cJSON_IsString(custom_format_json) && custom_format_json->valuestring != NULL) {
         err = app_wake_profile_parse_custom_format(
-            custom_format->valuestring, &config.custom_format
+            custom_format_json->valuestring, &config.custom_format
         );
+        if (err != ESP_OK) {
+            cJSON_Delete(root);
+            return send_json(req, 400, "{\"error\":\"invalid_custom_format\"}");
+        }
     }
-    if (err == ESP_OK) {
-        strncpy(config.custom_hex, custom_hex->valuestring,
+    if (cJSON_IsString(custom_hex_json) && custom_hex_json->valuestring != NULL) {
+        strncpy(config.custom_hex, custom_hex_json->valuestring,
                 sizeof(config.custom_hex) - 1);
         config.custom_hex[sizeof(config.custom_hex) - 1] = '\0';
-        err = app_wake_profile_set_config(&config);
     }
 
     cJSON_Delete(root);
 
+    err = app_wake_profile_set_config(&config);
     if (err == ESP_ERR_INVALID_ARG || err == ESP_ERR_INVALID_SIZE) {
         return send_json(req, 400, "{\"error\":\"invalid_wakeup_config\"}");
     }
@@ -287,8 +334,21 @@ static esp_err_t wakeup_config_post_handler(httpd_req_t *req)
         return send_json(req, 500, "{\"error\":\"wake_config_save_failed\"}");
     }
 
-    return send_wake_config_json(req, 200);
+    /* Return updated config */
+    app_wake_profile_config_t updated;
+    app_wake_profile_get_config(&updated);
+    char bt_mac_str[20] = "";
+    format_mac(updated.bluetooth_mac, bt_mac_str, sizeof(bt_mac_str));
+
+    char resp[256];
+    snprintf(resp, sizeof(resp),
+             "{\"profile\":\"%s\",\"bluetooth_mac\":\"%s\"}",
+             app_wake_profile_profile_name(updated.profile),
+             bt_mac_str);
+    return send_json(req, 200, resp);
 }
+
+/* ── POST /api/reset_wifi ────────────────────────────────────────── */
 
 static esp_err_t reset_wifi_post_handler(httpd_req_t *req)
 {
@@ -310,6 +370,8 @@ static esp_err_t reset_wifi_post_handler(httpd_req_t *req)
     }
     return ESP_OK;
 }
+
+/* ── Registration ────────────────────────────────────────────────── */
 
 esp_err_t app_http_register(httpd_handle_t server)
 {
